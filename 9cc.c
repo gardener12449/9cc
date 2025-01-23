@@ -37,7 +37,15 @@ void error_at(char* loc, char* fmt, ...){
   va_list ap;
   va_start(ap, fmt);
 
-  int pos = 
+  int pos = loc - user_input;
+  fprintf(stderr, "%s\n", user_input);
+  fprintf(stderr, "%*s", pos, " ");
+  fprintf(stderr, "^");
+  vfprintf(stderr, fmt, ap);
+  fprintf(stderr, "\n");
+  exit(1);
+}
+
 
 //次のトークンが期待している記号ならトークンを無為に
 //読み進めて真を返す。それ以外は偽を返す
@@ -60,7 +68,8 @@ void expect(char op) {
 //それ以外の場合はエラーを報告する
 int expect_number() {
   if (token->kind != TK_NUM)
-    error("not a number");
+    error("nor a number");
+
   int val = token->val;
   token = token->next;
   return val;
