@@ -6,9 +6,9 @@
 #include <stdlib.h>
 
 typedef enum {
-  TK_RESERVED, //記号
-  TK_NUM,      //整数トークン
-  TK_EOF      //入力の終わりのトークン
+  TK_RESERVED, //symbol
+  TK_NUM,      //integer
+  TK_EOF       //end of input
 } Tokenkind;
 
 typedef struct Token Token;
@@ -20,10 +20,29 @@ struct Token {
   char* str;      //token's string
 };
 
+//variety of nodes of abstract syntax tree
+typedef enum {
+  ND_ADD,
+  ND_SUB,
+  ND_MUL,
+  ND_DIV,
+  ND_NUM
+} Nodekind;
+
+typedef struct Node Node;
+
+//type of nodes of abstract syntax tree
+struct Node {
+  Nodekind kind; //type of a node
+  Node* lhs;     //left hand side
+  Node* rhs;     //ringht hand side
+  int val;       //nuber, if kind is ND_NUM
+};  
+
 Token* token; //current token
 char* user_input;
 
-//エラー出力
+//error output
 void error(char* fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
@@ -32,8 +51,8 @@ void error(char* fmt, ...) {
   exit(1);
 }
 
-//エラー出力２
-void error_at(char* loc, char* fmt, ...){
+//error output
+void error_at(char* loc, char* fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
 
@@ -46,9 +65,8 @@ void error_at(char* loc, char* fmt, ...){
   exit(1);
 }
 
-
-//次のトークンが期待している記号ならトークンを無為に
-//読み進めて真を返す。それ以外は偽を返す
+//if the next token is the same as what you expect,
+//then return true. in any other case, return false.
 bool consume(char op) {
   if (token->kind != TK_RESERVED || token->str[0] != op)
     return false;
@@ -56,16 +74,16 @@ bool consume(char op) {
   return true;
 }
 
-//次のトークンが期待している記号ならトークンを読み進める。
-//それ以外の場合はエラーを報告する
+//if the next token is the same as what you expect,
+//reads the next token. in any other case, call error()
 void expect(char op) {
   if (token->kind != TK_RESERVED || token->str[0] != op)
     error("not %c",op);
   token = token->next;
 }
 
-//次のトークンが数値ならトークンを読み進め数値を返す
-//それ以外の場合はエラーを報告する
+//if the next token is integer, return the value,
+//and reads the next token. in any other case, call error()
 int expect_number() {
   if (token->kind != TK_NUM)
     error("nor a number");
@@ -79,7 +97,7 @@ bool at_eof() {
   return token->kind == TK_EOF;
 }
 
-//新しいトークンを作成してつなげる
+//make a new token and join it
 Token* new_token(Tokenkind kind, Token* cur, char* str) {
   Token* tok = calloc(1, sizeof(Token));
   tok->kind = kind;
@@ -88,7 +106,7 @@ Token* new_token(Tokenkind kind, Token* cur, char* str) {
   return tok;
 }
 
-//入力文字列をトークナイズして返す
+//tokenize the user input and retruns it 
 Token* tokenize(char* p) {
   Token head;
   head.next = NULL;
