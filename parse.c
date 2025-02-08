@@ -1,47 +1,4 @@
-#include <ctype.h>
-#include <stdarg.h>
-#include <stdbool.h>
-#include <string.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include "9cc.h"
-
-typedef enum {
-  TK_RESERVED, //symbol
-  TK_NUM,      //integer
-  TK_EOF,       //end of input
-} Tokenkind;
-
-struct Token {
-  Tokenkind kind; //token type
-  Token* next;    //next token
-  int val;        //numeric value, if kind is int
-  char* str;      //token's string
-  int len;
-};
-
-//variety of nodes of abstract syntax tree
-typedef enum {
-  ND_ADD,
-  ND_SUB,
-  ND_MUL,
-  ND_DIV,
-  ND_NUM,
-  ND_EQ,
-  ND_NEQ,
-  ND_GT,
-  ND_LT,
-  ND_GTE,
-  ND_LTE,
-} Nodekind;
-
-//type of nodes of abstract syntax tree
-struct Node {
-  Nodekind kind; //type of a node
-  Node* lhs;     //left hand side
-  Node* rhs;     //ringht hand side
-  int val;       //nuber, if kind is ND_NUM
-};  
 
 //error output
 void error(char* fmt, ...) {
@@ -78,6 +35,15 @@ bool consume(char* op) {
     return false;
   token = token->next;
   return true;
+}
+
+Token* consume_ident() {
+  if (token->kind != TK_IDENT ||
+      token->str[0] < 'a' || token->str[0] > 'z')
+    return false;
+  Token* tok = token;
+  token = token->next;
+  return tok;
 }
 
 //if the next token is the same as what you expect,
@@ -122,7 +88,6 @@ Token* tokenize(char* p) {
   Token* cur = &head;
   
   while (*p) {
-    
     if (isspace(*p)) {
       p++;
       continue;
@@ -154,8 +119,14 @@ Token* tokenize(char* p) {
     
     if (*p == '+' || *p == '-' || *p == '*' ||
           *p == '/' || *p == '(' || *p == ')' ||
-	    *p == '>' || *p == '<') {
+	    *p == '>' || *p == '<' || *p == ';' ||
+	      *p == '=') {
       cur = new_token(TK_RESERVED, cur, p++, 1);
+      continue;
+    }
+
+    if ('a' <= *p && *p <= 'z') {
+      cur = new_token(TK_IDENT, cur, p++, 1);
       continue;
     }
           
@@ -165,11 +136,130 @@ Token* tokenize(char* p) {
       continue;
     }
 
-    error("cannot tokenize");
+    error("cannot tokenize, %s", *p);
   }
   
   new_token(TK_EOF, cur, p, 1);
   return head.next;
 }
 
+//----------------------------------------------------------
+//node processer
+//----------------------------------------------------------
+Node* new_node(Nodekind kind, Node* lhs, Node* rhs) {
+  Node* node = calloc(1, sizeof(Node));
+  node->kind = kind;
+  node->lhs = lhs;
+  node->rhs = rhs;
+  return node;
+}
 
+Node* new_node_num(int val) {
+  Node* node = calloc(1, sizeof(Node));
+  node->kind = ND_NUM;
+  node->val = val;
+  return node;
+}
+
+Node* primary() {
+  if (consume("(")) {
+    Node* node = expr();
+    expect(")");
+    return node;
+  }
+
+  Token* tok = consume_ident();
+  if (tok) {
+    Node* node = calloc(1, sizeof(Node));
+    node->kind = ND_LVAR;
+    node->offset = (tok->str[0] - 'a' + 1) * 8;
+    return node;
+  }
+
+  return new_node_num(expect_number());
+}
+
+Node* unary() {
+  if (consume("+"))
+    return primary();
+  if (consume("-"))
+    return new_node(ND_SUB, new_node_num(0), primary());
+  return primary();
+}
+
+Node* mul() {
+  Node* node = unary();
+
+  for (;;) {
+    if (consume("*"))
+      node = new_node(ND_MUL, node, unary());
+    else if (consume("/"))
+      node = new_node(ND_DIV, node, unary());
+    else
+      return node;
+  }
+}
+
+Node* add() {
+  Node* node = mul();
+
+  for (;;) {
+    if(consume("+"))
+      node = new_node(ND_ADD, node, mul());
+    else if (consume("-"))
+      node = new_node(ND_SUB, node, mul());
+
+    else return node;
+   }
+}
+
+Node* relational() {
+  Node* node = add();
+
+  for (;;) {
+    if (consume(">="))
+      node = new_node(ND_GTE, node, add());
+    else if (consume("<="))
+      node = new_node(ND_LTE, node, add());
+    else if (consume(">"))
+      node = new_node(ND_GT, node, add());
+    else if (consume("<"))
+      node = new_node(ND_LT, node, add());
+
+    else return node;
+  }
+
+}
+
+Node* equality() {
+  Node* node = relational();
+
+  if (consume("=="))
+    node = new_node(ND_EQ, node, relational());
+  else if (consume("!="))
+    node = new_node(ND_NEQ, node, relational());
+
+  return node;
+}
+
+Node* assign() {
+  Node* node = equality();
+  if (consume("="))
+    node = new_node(ND_ASSIGN, node, assign());
+  return node;
+}
+
+Node* expr() { return assign(); }
+
+Node* stmt() {
+  Node* node = expr();
+  expect(";");
+  return node;
+}
+
+void program() {
+  int i = 0;
+  while (!at_eof())
+    code[i++] = stmt();
+  code[i] = NULL;
+}
